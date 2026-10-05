@@ -1,0 +1,43 @@
+# Virtual environment
+lineascope-env/
+venv/
+env/
+
+# Data (too large for Git)
+data/raw/
+data/derived/
+data/osm/
+*.tif
+*.tiff
+*.gpkg
+
+# Keep reference lineaments (small, valuable)
+!data/reference/*.geojson
+
+# Models (can be large)
+models/*.joblib
+models/*.pkl
+
+# Results (regenerable)
+results/*.geojson
+results/*.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+*.key
