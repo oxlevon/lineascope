@@ -1,26 +1,12 @@
-# Virtual environment
+# ============================================
+# LineaScope — project .gitignore
+# ============================================
+
+# Virtual environments
 lineascope-env/
 venv/
 env/
-
-# Data (too large for Git)
-data/raw/
-data/derived/
-data/osm/
-*.tif
-*.tiff
-*.gpkg
-
-# Keep reference lineaments (small, valuable)
-!data/reference/*.geojson
-
-# Models (can be large)
-models/*.joblib
-models/*.pkl
-
-# Results (regenerable)
-results/*.geojson
-results/*.csv
+.venv/
 
 # Python
 __pycache__/
@@ -29,15 +15,61 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
+# Data (large — regenerable from pipeline except reference)
+data/raw/
+data/derived/
+data/osm/
+*.tif
+*.tiff
+*.gpkg
+*.parquet
+
+# Keep small reference data
+!data/reference/*.geojson
+
+# Models (regenerable)
+models/*.joblib
+models/*.pkl
+
+# Results (regenerable)
+results/*.png
+
+# QGIS
+*.qgz~
+*.qmd~
+.QGIS3/
+
+# Node / frontend
+node_modules/
+web/node_modules/
+web/dist/
+web/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files
+.env
+.env.local
+*.env.local
+
 # IDE
 .vscode/
 .idea/
 *.swp
+*.swo
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Secrets
-.env
-*.key
+# Large helper rasters (regenerable)
+data/derived/helper_*.tif
+data/derived/helper_*.tif.aux.xml
+data/derived/stack_20m.tif.aux.xml
+
+# Temp
+*.tmp
+*.bak
+~$*

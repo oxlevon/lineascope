@@ -1,0 +1,182 @@
+LineaScope — Data Acquisition and Processing Log
+Project: AI-Based Geological Lineament Detection System
+Author: Aguade Victoria
+Institution: Delta State University, Abraka — Faculty of Computing
+Study Area: Abraka and the Middle Ethiope River Corridor, Delta State, Nigeria
+Bounding Box (WGS84): Lat 5.65–5.95° N; Lon 6.00–6.30° E
+Working CRS: EPSG:32632 (WGS 84 / UTM zone 32N)
+Grid Resolution: 20 m
+Grid Size: 1672 columns × 1669 rows (≈ 2.79 million pixels per layer)
+Log Version: 2.0
+Last Updated: 7 October 2026
+
+1. Environment and Tools
+Component	Version / Detail
+Operating System	Windows
+Python	3.12
+Virtual environment	lineascope-env
+GIS software	QGIS (to be installed)
+Version control	Git (local repository)
+Primary libraries	numpy, scipy, pandas, rasterio, geopandas, shapely, pyproj, scikit-learn, scikit-image, opencv-python, matplotlib, joblib, osmnx, pytest, fastapi, uvicorn, pydantic, pyarrow
+2. Data Sources Acquired
+2.1 Satellite Imagery — Google Earth Engine
+GEE Account: Registered as Noncommercial, Community Tier
+GEE Project ID: lineascope-delsu
+Earth Engine Collection IDs:
+
+Sentinel-1: COPERNICUS/S1_GRD
+
+Sentinel-2: COPERNICUS/S2_SR_HARMONIZED
+
+DEM: COPERNICUS/DEM/GLO30
+
+Land cover: ESA/WorldCover/v200
+
+Date Window: 1 November 2025 – 1 April 2026 (extended dry season)
+(Originally tested 1 Dec 2025 – 1 Mar 2026; extended to capture more clean scenes.)
+
+2.2 Sentinel-1 Availability (GEE Script 1 output)
+Metric	Value
+Total Sentinel-1 scenes	25
+Ascending scenes	12
+Ascending relative orbit selected	103
+Descending scenes	13
+Descending relative orbit selected	22
+Polarizations	VV and VH
+Instrument mode	IW (Interferometric Wide Swath)
+2.3 Sentinel-2 Availability (GEE Script 1 output)
+Metric	Value
+Total Sentinel-2 scenes (any cloud)	74
+Sentinel-2 scenes under 20% cloud over AOI	3
+Composite type	Cloud-masked median composite
+Bands exported	B02, B03, B04, B08, B11, B12
+2.4 Files Exported from GEE (Script 2 — all completed)
+File	Content	Bands	Resolution
+S1_ASC_mean_std_20m.tif	Sentinel-1 ascending temporal mean and std	4 (VV_mean, VH_mean, VV_std, VH_std)	20 m
+S1_DESC_mean_std_20m.tif	Sentinel-1 descending temporal mean and std	4	20 m
+S2_median_6band_20m.tif	Sentinel-2 median composite	6 (B02–B12)	20 m
+CopDEM_GLO30_20m.tif	Copernicus DEM elevation	1	20 m
+WorldCover_2021_10m.tif	ESA WorldCover 2021	1	10 m (native)
+S1_ASC_scene_list.csv	Ascending scene metadata	—	—
+S1_DESC_scene_list.csv	Descending scene metadata	—	—
+S2_scene_list.csv	Sentinel-2 scene metadata	—	—
+All exported to Google Drive folder: LineaScope_data
+Downloaded to local project: data/raw/ and data/metadata/
+
+3. OpenStreetMap Data
+Downloaded using scripts/get_osm.py (via OSMnx from the Overpass API).
+
+Layer	Features	Output file	CRS
+Roads	2,423	data/osm/osm_roads.gpkg	EPSG:32632
+Waterways	19	data/osm/osm_waterways.gpkg	EPSG:32632
+Buildings	8,222	data/osm/osm_buildings.gpkg	EPSG:32632
+Note: The low waterway count (19) is expected in this region. OSM coverage in the Niger Delta is incomplete. DEM-derived drainage will supplement this in the feature stack.
+
+4. Grid Verification
+Verified with scripts/check_grid.py on 7 October 2026.
+
+File	CRS	Resolution	Size	Bands	Bounds match	Empty pixels
+CopDEM_GLO30_20m.tif	EPSG:32632	20 m	1672×1669	1	✅	0.0 %
+S1_ASC_mean_std_20m.tif	EPSG:32632	20 m	1672×1669	4	✅	0.0 %
+S1_DESC_mean_std_20m.tif	EPSG:32632	20 m	1672×1669	4	✅	0.0 %
+S2_median_6band_20m.tif	EPSG:32632	20 m	1672×1669	6	✅	0.0 %
+WorldCover_2021_10m.tif	EPSG:32632	10 m	3344×3338	1	✅	0.0 %
+Result: All good — no grid misalignment.
+
+5. Feature Stack Construction
+Script: src/offline/stack.py
+Output: data/derived/stack_20m.tif
+CRS: EPSG:32632 | Size: 1672×1669 | Bands: 25 | Resolution: 20 m
+
+Band list:
+
+#	Band	Source	Group
+1	VV_mean	Sentinel-1 (ASC + DESC averaged)	Radar
+2	VH_mean	Sentinel-1 (ASC + DESC averaged)	Radar
+3	VV_std	Sentinel-1 (ASC + DESC averaged)	Radar
+4	VH_std	Sentinel-1 (ASC + DESC averaged)	Radar
+5	B02	Sentinel-2 median	Optical
+6	B03	Sentinel-2 median	Optical
+7	B04	Sentinel-2 median	Optical
+8	B08	Sentinel-2 median	Optical
+9	B11	Sentinel-2 median	Optical
+10	B12	Sentinel-2 median	Optical
+11	NDVI	Derived from B08 and B04	Optical
+12	B11_B12_ratio	Derived from B11 and B12	Optical
+13	elevation	Copernicus DEM GLO-30	Topographic
+14	slope	Derived from elevation	Topographic
+15	aspect_sin	Derived from elevation	Topographic
+16	aspect_cos	Derived from elevation	Topographic
+17	hillshade_000	Derived from elevation (azimuth 0°)	Topographic
+18	hillshade_045	Derived from elevation (azimuth 45°)	Topographic
+19	hillshade_090	Derived from elevation (azimuth 90°)	Topographic
+20	hillshade_135	Derived from elevation (azimuth 135°)	Topographic
+21	curvature	Laplacian of elevation	Topographic
+22	tpi	Topographic Position Index (5×5 window)	Topographic
+23	dist_road	Euclidean distance to OSM roads	Cultural
+24	dist_waterway	Euclidean distance to OSM waterways	Cultural
+25	builtup_fraction	Fraction of WorldCover class 50 per 20 m pixel	Cultural
+6. Candidate Lineament Generation
+Script: src/offline/candidates.py
+Output: data/derived/candidates.geojson
+
+6.1 Edge-detection inputs (7 sources)
+Input	Source
+hillshade_000	Stack band 17
+hillshade_045	Stack band 18
+hillshade_090	Stack band 19
+hillshade_135	Stack band 20
+VV_mean	Stack band 1
+VH_mean	Stack band 2
+S2_PC1	First principal component of Sentinel-2 bands (5–10)
+6.2 Parameter sweep (4 configurations tested)
+Setting	Vote threshold	Canny (low/high)	Segments	Mean length (m)
+A (selected)	3	0.08 / 0.20	7,202	637.68
+B	4	0.10 / 0.25	524	594.24
+C	4	0.12 / 0.30	266	588.67
+D	5	0.10 / 0.25	4	541.13
+Selection rationale: Setting A is the only configuration producing a candidate count within the 2,000–8,000 target range specified in the Software Development Plan (Section 8.2).
+
+6.3 Final selected parameters
+Parameter	Value
+Canny sigma	1.5
+Canny low / high threshold	0.08 / 0.20
+Vote threshold (of 7 inputs)	3
+Hough min length	15 px (= 300 m)
+Hough max gap	4 px (= 80 m)
+Merge angle	10°
+Merge gap	80 m
+Minimum final length	500 m
+6.4 Verification (scripts/verify_candidates.py)
+Check	Target	Result	Status
+Candidate count	2,000–8,000	7,202	✅ Pass
+Minimum length	≥ 400 m	500 m	✅ Pass
+Spatial extent	Within AOI	Within AOI	✅ Pass
+CRS	EPSG:32632	EPSG:32632	✅ Pass
+Spatial coverage	All bins	36 of 36 (100%)	✅ Pass
+6.5 Azimuth distribution
+Azimuth bin	Count
+0–20°	478
+20–40°	735
+40–60°	1,338 (peak 1)
+60–80°	588
+80–100°	607
+100–120°	732
+120–140°	1,368 (peak 2)
+140–160°	852
+160–180°	504
+Observation: Two dominant azimuth peaks at 40–60° and 120–140° — almost perpendicular to each other. Possible causes: (a) hillshade illumination bias, (b) Sentinel-1 look direction bias, (c) genuine NE–SW / NW–SE structural trend of the Niger Delta. Distinguishing these is the task of the Random Forest classifier.
+
+7. Outstanding Data
+Item	Status
+Reference lineaments (≥100 hand-drawn in QGIS)	⏳ Not yet started — critical path
+Candidate feature table	⏳ Pending (next Python module)
+Trained Random Forest model	⏳ Pending
+Evaluation metrics	⏳ Pending
+8. Licences and Attribution
+Dataset	Provider	Licence
+Sentinel-1	ESA Copernicus via GEE	Free, open
+Sentinel-2	ESA Copernicus via GEE	Free, open
+Copernicus DEM GLO-30	ESA / Airbus via GEE	Free, open
+ESA WorldCover	ESA via GEE	CC BY 4.0
+OpenStreetMap	OSM contributors	ODbL
