@@ -1,0 +1,44 @@
+# Virtual environments
+lineascope-env/
+venv/
+
+# Node modules (huge)
+web/node_modules/
+web/dist/
+
+# Data (large — only small files ship)
+data/raw/
+data/derived/*.tif
+data/derived/helper_*.tif
+data/derived/*.aux.xml
+data/derived/candidates_v*.geojson
+data/osm/
+data/metadata/*.db
+*.tif
+*.tiff
+
+# Models (regenerable)
+models/rf_E*.joblib
+
+# Git, IDE, OS
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Docs and screenshots
+docs/
+results/
+web/public/results/
+
+# Caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local files
+.env
+.env.local
+lineascope.qgz

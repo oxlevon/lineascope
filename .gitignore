@@ -19,6 +19,7 @@ __pycache__/
 data/raw/
 data/derived/
 data/osm/
+data/metadata/*.db
 *.tif
 *.tiff
 *.gpkg

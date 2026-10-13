@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: lineascope-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: main
+    healthCheckPath: /api/health
+    autoDeploy: true
