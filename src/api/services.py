@@ -2,7 +2,8 @@
 services.py -- business logic for the LineaScope API.
 
 Loads the trained model and pre-computed candidate features once at
-startup, then scores candidates on request.
+startup, then scores candidates on request. Logs every detection run
+to a local SQLite database (src/api/db.py).
 """
 
 import json
@@ -20,6 +21,7 @@ from src.config import (
     BBOX_WGS84, GRID, CRS_PROJECTED,
     GRID_WIDTH, GRID_HEIGHT, ALL_LAYERS,
 )
+from src.api import db
 
 
 # ---------- singleton state ----------
@@ -51,12 +53,11 @@ def load_all():
     state.feature_cols = bundle["feature_cols"]
     state.model_version = bundle.get("experiment", "unknown")
 
-    print(f"[services] Loading candidates...")
+    print("[services] Loading candidates...")
     cands = gpd.read_file(DERIVED / "candidates.geojson")
     cands = cands.rename(columns={"id": "candidate_id"})
     feats = pd.read_parquet(DERIVED / "candidate_features.parquet")
 
-    # Merge
     merged = cands.merge(
         feats, on="candidate_id", how="inner", suffixes=("_c", "_f")
     )
@@ -65,7 +66,6 @@ def load_all():
     if "azimuth_f" in merged.columns:
         merged["azimuth"] = merged["azimuth_f"]
 
-    # Pre-score everything once
     X = merged[state.feature_cols].values.astype(np.float32)
     merged["probability"] = state.model.predict_proba(X)[:, 1]
 
@@ -80,6 +80,10 @@ def load_all():
     with open(DERIVED / "metrics.json") as f:
         state.metrics = json.load(f)
 
+    # Initialise the SQLite run log
+    db.init_db()
+    print(f"[services] Run log ready at {db.DB_PATH}")
+
     state.loaded = True
     print("[services] Ready.")
 
@@ -87,7 +91,6 @@ def load_all():
 # ---------- helpers ----------
 
 def _stats_from_detections(det: gpd.GeoDataFrame) -> dict:
-    """Compute the detection statistics dict."""
     if len(det) == 0:
         return {
             "count": 0,
@@ -135,21 +138,17 @@ def _stats_from_detections(det: gpd.GeoDataFrame) -> dict:
 # ---------- public API ----------
 
 def filter_candidates(threshold: float, min_length_m: int) -> gpd.GeoDataFrame:
-    """Apply probability threshold and length filter."""
     df = state.candidates
     mask = (df["probability"] >= threshold) & (df["length_m"] >= min_length_m)
     return df[mask].copy()
 
 
 def detect(threshold: float, min_length_m: int) -> dict:
-    """Run detection and return the response payload."""
     t0 = time.time()
     det = filter_candidates(threshold, min_length_m)
 
-    # Reproject to WGS84 for the response
     det_wgs = det.to_crs(CRS_WGS84)
 
-    # Build GeoJSON
     features = []
     for _, row in det_wgs.iterrows():
         features.append({
@@ -166,8 +165,24 @@ def detect(threshold: float, min_length_m: int) -> dict:
     stats = _stats_from_detections(det)
     runtime = time.time() - t0
 
+    # Log the run
+    try:
+        run_id = db.insert_run(
+            threshold=threshold,
+            min_length_m=min_length_m,
+            n_lineaments=stats["count"],
+            total_length_km=stats["total_length_km"],
+            runtime_s=runtime,
+        )
+        print(
+            f"[services] Logged run {run_id}: "
+            f"{stats['count']} lineaments in {runtime:.2f}s"
+        )
+    except Exception as e:
+        print(f"[services] WARN — failed to log run: {e}")
+
     return {
-        "params": {"threshold": threshold, "min_length_m": min_length_m},
+        "params": {"threshold": float(threshold), "min_length_m": int(min_length_m)},
         "geojson": {"type": "FeatureCollection", "features": features},
         "statistics": stats,
         "runtime_s": round(runtime, 4),
@@ -175,7 +190,6 @@ def detect(threshold: float, min_length_m: int) -> dict:
 
 
 def get_dataset_info() -> dict:
-    """Static dataset information for the status panel."""
     return {
         "study_area_name": "Abraka and Middle Ethiope River corridor, Delta State, Nigeria",
         "bbox_wgs84": BBOX_WGS84,
@@ -183,8 +197,7 @@ def get_dataset_info() -> dict:
         "resolution_m": GRID["res"],
         "grid_size": [GRID_WIDTH, GRID_HEIGHT],
         "layers": [
-            {"name": name, "description": name}
-            for name in ALL_LAYERS
+            {"name": name, "description": name} for name in ALL_LAYERS
         ],
         "date_range": {"start": "2025-11-01", "end": "2026-04-01"},
         "sentinel1_scenes": 25,
@@ -193,7 +206,6 @@ def get_dataset_info() -> dict:
 
 
 def get_reference_geojson() -> dict:
-    """Reference lineaments as GeoJSON in WGS84."""
     ref = state.reference.to_crs(CRS_WGS84)
     features = []
     for _, row in ref.iterrows():
@@ -214,14 +226,8 @@ def get_reference_geojson() -> dict:
 
 
 def get_metrics() -> dict:
-    """Metrics from the training run, plus the best experiment name."""
     m = state.metrics
-    # Determine best experiment from F1
     candidates = ["E1_DEM_only", "E2_S2_only", "E3_S1_only", "E4_all_features"]
-    f1s = {
-        k: m[k]["cv"]["pooled"]["f1"]
-        for k in candidates
-        if k in m
-    }
-    best = max(f1s, key=f1s.get)
+    f1s = {k: m[k]["cv"]["pooled"]["f1"] for k in candidates if k in m}
+    best = max(f1s, key=f1s.get) if f1s else "unknown"
     return {**m, "best_experiment": best}

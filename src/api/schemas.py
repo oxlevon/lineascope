@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field
 # ---------- /api/health ----------
 
 class HealthResponse(BaseModel):
-    status: str = Field(..., example="ok")
-    model_version: str = Field(..., example="E1_DEM_only")
-    data_loaded: bool = Field(..., example=True)
+    status: str = Field(..., examples=["ok"])
+    model_version: str = Field(..., examples=["E1_DEM_only"])
+    data_loaded: bool = Field(..., examples=[True])
     n_candidates: int
     n_reference: int
     n_detected_at_default: int
@@ -29,7 +29,7 @@ class DatasetResponse(BaseModel):
     bbox_wgs84: Dict[str, float]
     crs: str
     resolution_m: float
-    grid_size: List[int]        # [width, height]
+    grid_size: List[int]
     layers: List[LayerInfo]
     date_range: Dict[str, str]
     sentinel1_scenes: int
@@ -39,14 +39,11 @@ class DatasetResponse(BaseModel):
 # ---------- /api/detect ----------
 
 class DetectRequest(BaseModel):
-    threshold: float = Field(0.70, ge=0.0, le=1.0,
-                             description="Classifier probability threshold")
-    min_length_m: int = Field(400, ge=0,
-                              description="Minimum lineament length in metres")
+    threshold: float = Field(0.70, ge=0.0, le=1.0)
+    min_length_m: int = Field(400, ge=0)
 
 
 class LineamentFeature(BaseModel):
-    """One GeoJSON feature."""
     type: str = "Feature"
     geometry: Dict
     properties: Dict
@@ -78,51 +75,33 @@ class DetectResponse(BaseModel):
     runtime_s: float
 
 
-# ---------- /api/metrics ----------
-
-class FoldMetrics(BaseModel):
-    fold: int
-    n_test: int
-    tp: int
-    fp: int
-    tn: int
-    fn: int
-    precision: float
-    recall: float
-    f1: float
-    roc_auc: float
-    pr_auc: float
-
-
-class PooledMetrics(BaseModel):
-    precision: float
-    recall: float
-    f1: float
-    mcc: float
-    roc_auc: float
-    pr_auc: float
-    confusion_matrix: Dict[str, int]
-
-
-class ExperimentResult(BaseModel):
-    n_features: int
-    feature_cols: List[str]
-    folds: List[FoldMetrics]
-    pooled: PooledMetrics
-
-
-class MetricsResponse(BaseModel):
-    E0_baseline: Dict
-    E1_DEM_only: ExperimentResult
-    E2_S2_only: ExperimentResult
-    E3_S1_only: ExperimentResult
-    E4_all_features: ExperimentResult
-    best_experiment: str
-
-
 # ---------- /api/reference ----------
 
 class ReferenceResponse(BaseModel):
     count: int
     total_length_km: float
     geojson: FeatureCollection
+
+
+# ---------- /api/metrics ----------
+
+class MetricsResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
+
+# ---------- /api/runs ----------
+
+class RunRecord(BaseModel):
+    run_id: str
+    started_at: str
+    threshold: float
+    min_length_m: int
+    n_lineaments: int
+    total_length_km: float
+    runtime_s: float
+    git_commit: str
+
+
+class RunHistoryResponse(BaseModel):
+    count: int
+    runs: List[RunRecord]

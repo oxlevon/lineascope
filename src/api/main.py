@@ -4,30 +4,32 @@ main.py -- FastAPI application for LineaScope.
 Run locally:
     uvicorn src.api.main:app --reload --port 8000
 
-Open in a browser:
+Docs at:
     http://127.0.0.1:8000/docs
 """
 
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import Response
 
-from src.api import services
+from src.api import services, db
 from src.api.schemas import (
-    HealthResponse, DatasetResponse, DetectRequest, DetectResponse,
-    MetricsResponse, ReferenceResponse,
+    HealthResponse,
+    DatasetResponse,
+    DetectRequest,
+    DetectResponse,
+    MetricsResponse,
+    ReferenceResponse,
+    RunHistoryResponse,
 )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: load everything once
     services.load_all()
     yield
-    # Shutdown: nothing to clean up
 
 
 app = FastAPI(
@@ -39,13 +41,21 @@ app = FastAPI(
 
 
 # ---------- CORS ----------
-# Allow the frontend (Vite dev server, Vercel, etc.) to call this API.
-# In production, tighten to the actual frontend origin.
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],       # TODO: restrict on deployment
-    allow_methods=["GET", "POST"],
+    allow_origins=[
+        # Local development
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_credentials=False,
+    allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -61,9 +71,7 @@ def health():
         data_loaded=services.state.loaded,
         n_candidates=len(services.state.candidates),
         n_reference=len(services.state.reference),
-        n_detected_at_default=len(
-            services.filter_candidates(0.70, 400)
-        ),
+        n_detected_at_default=len(services.filter_candidates(0.70, 400)),
     )
 
 
@@ -93,9 +101,16 @@ def reference():
 
 @app.get("/api/metrics", response_model=MetricsResponse)
 def metrics():
-    m = services.get_metrics()
-    # metrics.json keys include E0_baseline and E1..E4, plus best_experiment
-    return MetricsResponse(**m)
+    return MetricsResponse(**services.get_metrics())
+
+
+# ---------- /api/runs ----------
+
+@app.get("/api/runs", response_model=RunHistoryResponse)
+def runs(limit: int = 10):
+    """Return the most recent detection runs from the SQLite log."""
+    items = db.list_runs(limit=limit)
+    return RunHistoryResponse(count=db.count_runs(), runs=items)
 
 
 # ---------- /api/download ----------
@@ -104,20 +119,20 @@ def metrics():
 def download(
     threshold: float = Query(0.70, ge=0.0, le=1.0),
     min_length_m: int = Query(400, ge=0),
-    format: str = Query("geojson", regex="^(geojson|csv)$"),
+    format: str = Query("geojson", pattern="^(geojson|csv)$"),
 ):
     det = services.filter_candidates(threshold, min_length_m)
 
     if format == "geojson":
-        gdf_wgs = det.to_crs("EPSG:4326")[["candidate_id", "length_m",
-                                            "azimuth", "probability", "geometry"]]
+        gdf_wgs = det.to_crs("EPSG:4326")[
+            ["candidate_id", "length_m", "azimuth", "probability", "geometry"]
+        ]
         body = gdf_wgs.to_json()
         return Response(
             content=body,
             media_type="application/geo+json",
             headers={
-                "Content-Disposition":
-                    f"attachment; filename=lineascope_detections.geojson"
+                "Content-Disposition": "attachment; filename=lineascope_detections.geojson"
             },
         )
     else:
@@ -127,7 +142,6 @@ def download(
             content=body,
             media_type="text/csv",
             headers={
-                "Content-Disposition":
-                    f"attachment; filename=lineascope_detections.csv"
+                "Content-Disposition": "attachment; filename=lineascope_detections.csv"
             },
         )
