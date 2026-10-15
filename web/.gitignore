@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+
+# Figure-generation scripts (kept local, not submitted)
+scripts/generate_*.py
